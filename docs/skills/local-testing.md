@@ -236,6 +236,18 @@ take the digest from that release's `org.bootcinstaller.Installer.flatpak`
 asset (`digest` field of `gh api repos/tuna-os/bootc-installer/releases/tags/<tag>`,
 or download and `sha256sum` it) rather than guessing or reusing an old value.
 
+`install-flatpaks.sh` creates `/var/tmp` (`mkdir -p /var/tmp && chmod 1777`)
+before any flatpak op. The `tuna-os` remote is an OCI remote and flatpak
+fetches its access tokens from `/var/tmp`, which this minimal base image does
+not ship; Flathub's ostree remotes never touch it, so only the Ghostty install
+from tuna-os fails without it (the CI regression in #837, where the bake died
+with `opendir(/var/tmp): No such file or directory`). The standard `build-iso.sh`
+already does the same `mkdir -p /var/tmp` before its skopeo step, so this is
+the established pattern, not a one-off. The base image ships `/var/tmp` on a
+real boot, so this only covers the build container; the world-writable mode
+matches the FHS the live system boots from. No-op where `/var/tmp` already
+exists.
+
 ## Tacklebox ISOs (unpublished variants)
 
 `just iso-tacklebox` builds a live ISO via

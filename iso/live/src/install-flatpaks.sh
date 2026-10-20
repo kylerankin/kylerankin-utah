@@ -53,6 +53,16 @@ INSTALLER_VERSION="${UTAH_INSTALLER_VERSION:-v2026.09.25-51f8cfe6}"
 # a newer installer.
 INSTALLER_SHA256="${UTAH_INSTALLER_SHA256:-a303514765c3ba8c33e71e5361f36cf4bad906d46d473818286527891c40c5b5}"
 
+# The tuna-os Flatpak remote is an OCI remote: flatpak fetches its access
+# tokens from /var/tmp, which this minimal base image does not ship. Flathub's
+# ostree remotes never touch /var/tmp, which is why every earlier flatpak in
+# this step installed while the Ghostty install from tuna-os died with
+#   opendir(/var/tmp): No such file or directory
+# Create it (world-writable, as the FHS requires for the live system that boots
+# from the ISO); the base image ships it on real boots, so this only covers the
+# build container. No-op where /var/tmp already exists.
+mkdir -p /var/tmp && chmod 1777 /var/tmp
+
 mkdir -p "${FLATPAK_CACHE}/tmp" /run/dbus
 export TMPDIR="${FLATPAK_CACHE}/tmp"
 # /root is a symlink to /var/roothome in a bootc image and the target does not
