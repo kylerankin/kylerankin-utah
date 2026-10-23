@@ -226,11 +226,11 @@ def png(d):
             elif ft == 3:
                 line[x] = (v + ((a + b) >> 1)) & 255
             elif ft == 4:
-                p = b - a
-                pr = a + c - p
-                nd = min(abs(pr - a), abs(pr - c), abs(pr - b))
-                cc = c if abs(pr - c) == nd else (b if abs(pr - b) == nd else a)
-                line[x] = (v + cc) & 255
+                # Paeth predictor (RFC 2083 §6.6): p = a + b - c, then take
+                # whichever of a, b, c is nearest to p, ties broken a, b, c.
+                p = a + b - c
+                pr = a if abs(p - a) <= abs(p - b) and abs(p - a) <= abs(p - c) else (b if abs(p - b) <= abs(p - c) else c)
+                line[x] = (v + pr) & 255
             unf += bytes([line[x]])
         prev = line
     grey = ct == 0

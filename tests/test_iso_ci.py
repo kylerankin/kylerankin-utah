@@ -343,6 +343,85 @@ class EvidenceTests(unittest.TestCase):
             self.assertIn("blank frame", drive(blank).stderr)
             self.assertNotEqual(drive(garbage).returncode, 0)
 
+    def _encode_truecolor_png(self, pixels, filter_type):
+        # pixels: list of rows, each a list of (r, g, b) tuples. Encodes every
+        # scanline with the given PNG filter type (0-4) using the spec predictor,
+        # so decoding must reproduce the exact input pixels.
+        import struct, zlib
+        w, h = len(pixels[0]), len(pixels)
+        stride = w * 3
+        raw = bytearray()
+        for y in range(h):
+            prev = pixels[y - 1] if y > 0 else None
+            line = pixels[y]
+            raw.append(filter_type)
+            for x in range(stride):
+                px = line[x // 3][x % 3]
+                a = line[x // 3 - 1][x % 3] if x >= 3 else 0
+                b = prev[x // 3][x % 3] if prev else 0
+                c = prev[x // 3 - 1][x % 3] if (prev and x >= 3) else 0
+                if filter_type == 0:
+                    f = px
+                elif filter_type == 1:
+                    f = (px - a) & 255
+                elif filter_type == 2:
+                    f = (px - b) & 255
+                elif filter_type == 3:
+                    f = (px - ((a + b) >> 1)) & 255
+                else:
+                    # Paeth predictor (RFC 2083 §6.6)
+                    p = a + b - c
+                    pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+                    pred = a if pa <= pb and pa <= pc else (b if pb <= pc else c)
+                    f = (px - pred) & 255
+                raw.append(f)
+        ihdr = struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)
+
+        def chunk(ct, data):
+            body = ct + data
+            return struct.pack(">I", len(data)) + body + struct.pack(
+                ">I", zlib.crc32(body) & 0xffffffff)
+
+        return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr)
+                + chunk(b"IDAT", zlib.compress(bytes(raw))) + chunk(b"IEND", b""))
+
+    def _decode_via_helper(self, png_bytes):
+        # Run the PNG decoder embedded in the real screenshot_not_blank helper
+        # (the exact code under test) and return its decoded pixels.
+        import sys
+        script = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
+        start = script.index("python3 -c '") + len("python3 -c '")
+        end = script.index("'", start)
+        body = script[start:end]
+        with tempfile.TemporaryDirectory() as td:
+            png = Path(td) / "decode.png"
+            png.write_bytes(png_bytes)
+            old_argv = sys.argv
+            sys.argv = ["x", str(png)]
+            try:
+                ns = {}
+                exec(body, ns)  # the helper reads argv[1] and exits; that is fine
+                _, _, pixels = ns["png"](png_bytes)
+                return pixels
+            finally:
+                sys.argv = old_argv
+
+    def test_png_filters_0_through_4_round_trip_exact_pixels(self):
+        # #796 / hanthor's review: screenshot_not_blank decoded PNG filter type 4
+        # (Paeth) with a wrong predictor, so busy frames could be miscounted.
+        # Round-trip a small busy image through every filter type 0-4 and assert
+        # the helper's decoder reproduces the exact input pixels. A wrong Paeth
+        # (e.g. p = b - a, pr = a + c - p) fails this for filter 4.
+        pixels = [[((y * 41 + x * 7) & 255, (y * 83 + x * 131) & 255,
+                    (y * 17 + x * 227) & 255) for x in range(4)]
+                  for y in range(3)]
+        expected = [px for row in pixels for px in row]
+        for ft in range(5):
+            with self.subTest(filter_type=ft):
+                encoded = self._encode_truecolor_png(pixels, ft)
+                decoded = self._decode_via_helper(encoded)
+                self.assertEqual(decoded, expected)
+
     def test_installed_system_asserts_the_booted_image_is_the_offline_payload(self):
         script = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
         self.assertIn("bootc status --json", script)
