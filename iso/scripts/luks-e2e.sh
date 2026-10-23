@@ -165,7 +165,7 @@ shot() {
 # a solid-black or frozen frame of a few kilobytes still passes the -s (non-
 # empty) gate above and would be published as proof a session started. This
 # rejects a capture whose pixels are essentially a single colour -- a blank or
-# frozen frame. A truncated or corrupt file is rejected separately, when the
+# flat-colour frame. A truncated or corrupt file is rejected separately, when the
 # decoder below fails to open it. It reads the PNG with the Python standard
 # library only, because ffmpeg and ImageMagick are not guaranteed to be
 # installed where this gate runs.
@@ -261,7 +261,7 @@ if colors <= 4:
     sys.stderr.write("blank frame: only " + str(colors) + " distinct colours in a " + str(w) + "x" + str(h) + " shot\n")
     sys.exit(3)
 ' "${png}" 2>&1)"; then
-        fail "screenshot ${png} shows a blank or frozen frame rather than the desktop: ${msg}"
+        fail "screenshot ${png} shows a blank or flat-colour frame rather than the desktop: ${msg}"
     fi
 }
 
