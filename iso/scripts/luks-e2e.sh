@@ -191,6 +191,8 @@ def ppm(d):
     px = [(body[k], body[k+1], body[k+2]) for k in range(0, len(body) - 2, 3)]
     return w, h, px
 def png(d):
+    # Assumes 8-bit, non-interlaced PNG (IHDR bit depth/interlace bytes are not
+    # checked): the shape ffmpeg writes when converting the QEMU PPM capture.
     w = struct.unpack(">I", d[16:20])[0]
     h = struct.unpack(">I", d[20:24])[0]
     ct = d[25]
