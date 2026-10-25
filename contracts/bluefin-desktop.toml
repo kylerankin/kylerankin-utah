@@ -318,3 +318,17 @@ masked = [
   # and respawns every ~10s for the whole session; see #103.
   "serial-getty@ttyS0.service",
 ]
+# Network daemons added by the parity package rollout (#868): dnsmasq, rpcbind,
+# autofs, openvpn, saned (sane-backends) and ipp-usb. None is meant to run on a
+# desktop; Hummingbird's 99-default-disable keeps them off. This list is the
+# machine-checked half of that promise -- without it the build passes as long as
+# the enabled and masked sets are right, and any one of these flipping on would
+# go undetected. Assert they stay disabled.
+disabled = [
+  "dnsmasq.service",
+  "rpcbind.service",
+  "autofs.service",
+  "openvpn.service",
+  "saned.service",
+  "ipp-usb.service",
+]
