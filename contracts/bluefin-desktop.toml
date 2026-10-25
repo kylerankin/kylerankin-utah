@@ -323,12 +323,17 @@ masked = [
 # desktop; Hummingbird's 99-default-disable keeps them off. This list is the
 # machine-checked half of that promise -- without it the build passes as long as
 # the enabled and masked sets are right, and any one of these flipping on would
-# go undetected. Assert they stay disabled.
+# go undetected. Assert they stay disabled. Names are the units the packages
+# actually ship: openvpn has only the client@/server@ templates, rpcbind is
+# also socket-activated, and saned is socket-activated from sane-backends-daemon
+# (not installed today, so saned.socket reports not-found until it is).
 disabled = [
   "dnsmasq.service",
   "rpcbind.service",
+  "rpcbind.socket",
   "autofs.service",
-  "openvpn.service",
-  "saned.service",
+  "openvpn-client@.service",
+  "openvpn-server@.service",
+  "saned.socket",
   "ipp-usb.service",
 ]

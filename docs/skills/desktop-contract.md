@@ -201,14 +201,14 @@ one is pending a composefs boot check (see below):
 - `systemd-remount-fs.service: mount: /: fsconfig() failed: overlay: No
   changes allowed in reconfigure` (#585): systemd-remount-fs unconditionally
   remounts `/` read-write, but the composefs root is `ro` (`findmnt /` shows
-  `composefs overlay ro,...`), so the remount fails and the unit exits 1. `systemd-remount-fs.service.d/10-utah-composefs-skip.conf` adds
-  `ConditionPathIsReadWrite=/` fails on composefs's `ST_RDONLY` flag, so
-  systemd skips the unit instead of failing it. The live
-  ISO path (`iso/scripts/build-iso.sh`, overlay root) is mounted writable,
-  so the condition succeeds and the remount still runs there. Limitation:
-  the condition is also false on any read-only `/` (non-composefs `ro`
-  kargs, an fsck fallback, an incomplete ostree deployment), so the unit is
-  skipped there too. Removing the drop-in restores the unit. Not yet boot-verified: on a composefs VM, confirm
+  `composefs overlay ro,...`), so the remount fails and the unit exits 1.
+  `systemd-remount-fs.service.d/10-utah-composefs-skip.conf` adds
+  `ConditionPathIsReadWrite=/`, which composefs's `ST_RDONLY` flag fails, so
+  systemd skips the unit. The writable live ISO root still runs the remount.
+  Limitation: any read-only `/` (non-composefs `ro` kargs, fsck fallback,
+  incomplete ostree deployment) skips the unit too. Removing the drop-in
+  restores it; `tests/test_boot_noise.py` keeps the drop-in in sync with the
+  contract. Not yet boot-verified: on a composefs VM, confirm
   `systemctl show -p ActiveState,ConditionResult systemd-remount-fs` reports
   `inactive`/`no` and `systemctl is-system-running` reports `running`.
 
@@ -442,15 +442,15 @@ deleted at build time, and a preset entry alone would not stop it.
 
 ### The newly added network daemons are held disabled (#869)
 
-The parity rollout (#868) added dnsmasq, rpcbind, autofs, openvpn, saned
-(`sane-backends`) and ipp-usb, all meant to stay off via Hummingbird's
-`99-default-disable.preset`. The `[services]` section previously asserted only
-which units were enabled or masked, so one flipping on passed the build. A
-`disabled` list in `contracts/bluefin-desktop.toml` plus a check in
-`scripts/verify-desktop-contract.py` now fails the build if any of
-`dnsmasq.service`, `rpcbind.service`, `autofs.service`, `openvpn.service`,
-`saned.service` or `ipp-usb.service` becomes enabled; a masked or absent unit
-counts as held off. Keep it in sync with `baselines/triage.toml`.
+The parity rollout (#868) added network daemons that Hummingbird's
+`99-default-disable.preset` must keep off. The `disabled` list in
+`contracts/bluefin-desktop.toml` (checked by `verify-desktop-contract.py`)
+fails the build if `dnsmasq.service`, `rpcbind.service`/`.socket`,
+`autofs.service`, `openvpn-{client,server}@.service`, `saned.socket` or
+`ipp-usb.service` is enabled; masked, static (ipp-usb is udev-started) or
+absent units count as off. Keep it in sync with `baselines/triage.toml`.
+
+### The fwupd-refresh unit pins a static user (#385)
 
 Hummingbird builds fwupd with `-Dsystemd_unit_user=""`, which expands the
 `@user@` template in `data/motd/fwupd-refresh.service.in` to `DynamicUser=yes`.

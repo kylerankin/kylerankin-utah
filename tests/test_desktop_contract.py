@@ -225,6 +225,44 @@ class UnitEnabledTests(unittest.TestCase):
         self.assertFalse(self.run_with(1, "enabled\n"))
 
 
+class UnitDisabledTests(unittest.TestCase):
+    """`unit_disabled` backs the contract's `disabled` list: a unit that is off
+    and cannot be turned on passes, anything enabled fails the build."""
+
+    def run_with(self, returncode, stdout):
+        result = type("R", (), {"returncode": returncode, "stdout": stdout})()
+        with patch.object(desktop, "unit_masked", return_value=False), patch.object(
+            desktop.subprocess, "run", return_value=result
+        ) as runner:
+            disabled = desktop.unit_disabled("ipp-usb.service")
+        self.assertEqual(runner.call_args[0][0], ["systemctl", "is-enabled", "ipp-usb.service"])
+        return disabled
+
+    def test_disabled_static_and_not_found_count_as_off(self):
+        self.assertTrue(self.run_with(1, "disabled\n"))
+        # ipp-usb.service has no [Install] section, so is-enabled reports static.
+        self.assertTrue(self.run_with(0, "static\n"))
+        self.assertTrue(self.run_with(1, "not-found\n"))
+
+    def test_enabled_states_fail(self):
+        for state in ("enabled", "enabled-runtime", "indirect", "alias", "generated"):
+            with self.subTest(state=state):
+                self.assertFalse(self.run_with(0, f"{state}\n"))
+
+    def test_a_masked_unit_counts_as_off_without_asking_systemctl(self):
+        with patch.object(desktop, "unit_masked", return_value=True), patch.object(
+            desktop.subprocess, "run"
+        ) as runner:
+            self.assertTrue(desktop.unit_disabled("dnsmasq.service"))
+        runner.assert_not_called()
+
+    def test_missing_systemctl_fails_closed(self):
+        with patch.object(desktop, "unit_masked", return_value=False), patch.object(
+            desktop.subprocess, "run", side_effect=FileNotFoundError
+        ):
+            self.assertFalse(desktop.unit_disabled("dnsmasq.service"))
+
+
 class CheckModeTests(unittest.TestCase):
     def run_check(self, text):
         with tempfile.TemporaryDirectory() as tmp:

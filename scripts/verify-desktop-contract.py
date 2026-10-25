@@ -97,12 +97,13 @@ def unit_masked(unit: str, root: Path = Path("/")) -> bool:
 
 
 def unit_disabled(unit: str, root: Path = Path("/")) -> bool:
-    """True when a unit is deliberately kept off: masked or explicitly disabled.
+    """True when a unit is deliberately kept off: masked, disabled, static or absent.
 
     This is the negative half of the service contract: the enabled/user_enabled
     and masked lists assert what must be on, this asserts what must stay off. A
     unit that is merely absent (its package not installed) is also off, so it
-    counts here.
+    counts here. A static unit has no [Install] section, so it cannot be enabled
+    at all (ipp-usb.service is started only by udev on device hotplug).
     """
     if unit_masked(unit, root):
         return True
@@ -110,7 +111,7 @@ def unit_disabled(unit: str, root: Path = Path("/")) -> bool:
         result = subprocess.run(
             ["systemctl", "is-enabled", unit], capture_output=True, text=True, check=False
         )
-        return result.stdout.strip() in {"disabled", "not-found"}
+        return result.stdout.strip() in {"disabled", "static", "not-found"}
     except FileNotFoundError:
         return False
 

@@ -11,8 +11,9 @@ These tests run that branch against a synthetic image root. `main()` reaches
 the image through module-level `Path(...)` calls on absolute paths, so the
 tests redirect the three image prefixes (`/usr`, `/etc`, `/var`) into a
 temporary directory and leave every other path -- notably the contract file
-itself -- alone. `unit_enabled` and `unit_masked` shell out to systemctl and
-are covered by their own tests, so they are replaced here with declared sets.
+itself -- alone. `unit_enabled`, `unit_masked` and `unit_disabled` shell out
+to systemctl and are covered by their own tests, so they are replaced here with
+declared sets.
 """
 
 import json
@@ -121,6 +122,7 @@ class VerifyModeTests(unittest.TestCase):
         self.enabled = {"gdm.service"}
         self.user_enabled = {"pipewire.socket", "wireplumber.service"}
         self.masked = {"bootc-fetch-apply-updates.timer"}
+        self.disabled = {"dnsmasq.service"}
 
     @staticmethod
     def os_release_text(values):
@@ -145,6 +147,8 @@ class VerifyModeTests(unittest.TestCase):
         ), patch.object(
             desktop, "user_unit_enabled", lambda unit: unit in self.user_enabled
         ), patch.object(desktop, "unit_masked", lambda unit: unit in self.masked), patch.object(
+            desktop, "unit_disabled", lambda unit: unit in self.disabled
+        ), patch.object(
             desktop.sys, "argv", ["verify", str(path)]
         ):
             with patch("sys.stdout") as out, patch.object(desktop.sys, "stderr") as err:
@@ -375,6 +379,23 @@ class ServiceTests(VerifyModeTests):
         errors = self.assert_rejected(contract, naming="not enabled: gdm.service")
         self.assertIn("not enabled: sshd.service", errors)
 
+    def disabled_contract(self, *units):
+        contract = base_contract()
+        contract["services"] = dict(contract["services"], disabled=list(units))
+        return contract
+
+    def test_held_off_services_pass_and_are_counted(self):
+        code, out, errors = self.verify(self.disabled_contract("dnsmasq.service"))
+        self.assertEqual(code, 0, errors)
+        self.assertIn("1 disabled services", out)
+
+    def test_a_service_that_is_not_disabled_is_named(self):
+        self.disabled = set()
+        self.assert_rejected(
+            self.disabled_contract("dnsmasq.service"),
+            naming="service must be disabled: dnsmasq.service",
+        )
+
 
 class FailClosedTests(VerifyModeTests):
     def test_unrelated_failures_are_all_reported_in_one_run(self):
@@ -403,6 +424,8 @@ class FailClosedTests(VerifyModeTests):
         with patch.object(desktop, "Path", image_path_factory(self.root)), patch.object(
             desktop, "unit_enabled", lambda unit: False
         ), patch.object(desktop, "unit_masked", lambda unit: False), patch.object(
+            desktop, "unit_disabled", lambda unit: False
+        ), patch.object(
             desktop.sys, "argv", ["verify", str(path)]
         ):
             with patch("sys.stdout"), patch.object(desktop.sys, "stderr"):
