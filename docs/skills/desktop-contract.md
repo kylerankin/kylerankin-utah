@@ -126,13 +126,11 @@ default Brewfile. Utah follows that upstream default set; the ordered app
 contract changes with the pinned artifact rather than overriding its Brewfile.
 Read the live pin from `Containerfile` — Renovate rewrites it there, so no
 digest is repeated in this document. The verifier still compares the actual
-inherited Brewfile. This source change does not
-introduce an uninstall for existing user-installed applications.
+inherited Brewfile.
 
 The same pinned Common artifact owns ChairLift's alpha.4 helper and ublue
 policy. Their payload matches the release and requires administrator
-authentication for all nine actions. The image contract requires both files;
-Utah does not layer a duplicate release install over Common's copy.
+authentication for all nine actions.
 The full Control Center integration follows Dakota: Common supplies the
 all-user launcher/icons, distro config, trusted `projectbluefin/tap/chairlift`
 Brewfile, bootc staging helper/policy, and three GSettings schemas. The desktop
@@ -286,11 +284,10 @@ its `metadata.json`. It runs in two modes from the same script:
   metadata, so gnome-shell hit "Permission denied". The build script
   normalizes the tree with `chmod -R u+rwX,go+rX,go-w`.
 
-Building GSConnect runs meson install. Because `desktop-file-utils` is not
-published by Hummingbird or Utah's repository, `scripts/build-gnome-extensions.sh`
-disables GSConnect's `update_desktop_database` meson post-install hook to avoid
-failing on the missing utility. MIME and schema databases are handled by the
-system and glib-compile-schemas.
+Building GSConnect runs meson install; `scripts/build-gnome-extensions.sh`
+disables GSConnect's `update_desktop_database` hook because `desktop-file-utils`
+is not published by Hummingbird or Utah's repository. MIME and schema databases
+are handled by the system and glib-compile-schemas.
 
 Declaring GNOME 51 in `metadata.json` is necessary, not sufficient: both
 failures below passed the metadata check, built cleanly, and only showed up
@@ -316,7 +313,13 @@ copy the changed tree under `bootc usr-overlay`, restart `gdm`, then verify
 `gnome-extensions info <uuid>` reports `State: ACTIVE`; inspect the session
 journal for load errors. SSH probes must set `XDG_RUNTIME_DIR=/run/user/<uid>`
 and `DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/<uid>/bus`, because SSH does
-not inherit the graphical session's D-Bus environment.
+not inherit the graphical session's D-Bus environment. Extension dconf
+defaults in `08-dakota-extension-defaults` use short schema paths, never the
+UUID folder name, and GNOME applies a dconf key only when a shipped schema
+declares that path. The guard in
+[`references/extension-dconf-defaults.md`](references/extension-dconf-defaults.md)
+(`tests/test_dakota_extension_defaults.py`) asserts every section header matches
+a `path=` the extensions ship; it skips when the submodules are not checked out.
 
 ## The OS logo is an os-release key
 
@@ -370,12 +373,10 @@ originally caught the regression. The compile is guarded on `/usr/bin/dconf`
 so it is a no-op on a host without the gnome-desktop stack (CI without
 `dnf install` of it).
 
-`dconf update` does **not** validate the logo path — it compiles keyfiles
-and stores `logo` as an opaque string, so a dangling path compiles
-cleanly. The image itself is guarded by the new `[branding].files`
+`dconf update` compiles keyfiles but treats `logo` as an opaque string, so a
+dangling path compiles cleanly; the image is guarded by the `[branding].files`
 entry for `/usr/share/pixmaps/bluefin-gdm-logo.png` in
-`contracts/bluefin-desktop.toml`, enforced by
-`utah-verify-desktop-contract` in the same `RUN` layer.
+`contracts/bluefin-desktop.toml` via `utah-verify-desktop-contract`.
 
 `[configuration].files` asserts the keyfile's path on disk;
 `[configuration].file_contains` pins both the schema header and the
