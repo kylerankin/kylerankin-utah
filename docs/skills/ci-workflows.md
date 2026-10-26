@@ -1,7 +1,7 @@
 ---
 name: ci-workflows
 version: "1.0"
-last_updated: "2026-09-19"
+last_updated: "2026-08-08"
 id: ci-workflows
 one_line_purpose: Navigate Utah's build, promote, and sync workflow topology.
 entry_point: docs/skills/ci-workflows.md
@@ -250,6 +250,21 @@ the ISO is written. Successful post-fix E2E run `35469913325` measured 3.9G
 headroom for the largest flavor. The guard lives in the build script, so it
 holds for every caller (local `just iso`, the CI LUKS job, and any deliberate
 rerun), not just one workflow.
+
+## Tacklebox ISO builder provenance
+
+The `tacklebox-iso` job builds and re-verifies the ISO with the published
+`ghcr.io/tuna-os/tacklebox` image, run `--privileged` with `/dev` mounted.
+utah#918 opened because that image was digest-locked but never checked before
+running as root. `iso/scripts/verify-tacklebox-attestation.sh` is the single
+source of the pin and the check: it installs the version-pinned cosign binary
+(verified against a pinned SHA-256) and runs
+`cosign verify-attestation --type=https://slsa.dev/provenance/v1` with the
+Fulcio identity pinned to the tacklebox `release-image.yml` workflow on `main`,
+so an unsigned image or one attested by any other workflow is rejected. The
+build script calls it before the pull, and the workflow calls it before its
+verify run, so neither privileged run starts on an untrusted image and the
+mutable `:latest` tag is never executed.
 
 ## Verification
 

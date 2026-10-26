@@ -229,8 +229,10 @@ echo "    output:  ${ISO_OUT}"
 # image runs as root with --privileged and /dev mounted, so whoever can move
 # the tag would own the build host. Same trust story as the Containerfile's
 # Renovate-managed ARG digests and install-flatpaks.sh's installer SHA-256.
-# Override with TACKLEBOX_IMAGE when validating a newer tacklebox.
-TACKLEBOX_IMAGE="${TACKLEBOX_IMAGE:-ghcr.io/tuna-os/tacklebox:latest@sha256:7415c1c23f83918b0c22f14ceee199e46f47e8411f54582d8b8899837c2c3441}"
+# The pin lives in iso/scripts/verify-tacklebox-attestation.sh as the single
+# source of truth; read it back here so it cannot drift from the attestation
+# check (utah#918). Override with TACKLEBOX_IMAGE when validating a newer one.
+TACKLEBOX_IMAGE="${TACKLEBOX_IMAGE:-$(bash iso/scripts/verify-tacklebox-attestation.sh --print-image)}"
 TIMEOUT_SECONDS="${TACKLEBOX_TIMEOUT_SECONDS:-4800}"
 [[ "$TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]] || {
     echo "ERROR: TACKLEBOX_TIMEOUT_SECONDS must be a positive integer." >&2
@@ -260,6 +262,10 @@ elif [[ "${TACKLEBOX_FROM_SOURCE:-0}" == "1" ]]; then
     TB=("$CACHE/tacklebox")
 else
     echo "==> Using tacklebox image: ${TACKLEBOX_IMAGE}"
+    # Verify the published image's SLSA provenance before running it
+    # privileged (utah#918): reject anything not attested by the tuna-os/tacklebox
+    # release-image.yml workflow.
+    TACKLEBOX_IMAGE="$TACKLEBOX_IMAGE" bash iso/scripts/verify-tacklebox-attestation.sh
     podman pull "$TACKLEBOX_IMAGE" >/dev/null
     # --privileged for loop devices; the out dir is mounted at the same path
     # so the absolute live_customize path in the recipe resolves inside too.
