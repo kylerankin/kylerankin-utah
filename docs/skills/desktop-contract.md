@@ -451,6 +451,13 @@ fails the build if `dnsmasq.service`, `rpcbind.service`/`.socket`,
 `ipp-usb.service` is enabled; masked, static (ipp-usb is udev-started) or
 absent units count as off. Keep it in sync with `baselines/triage.toml`.
 
+Apache `httpd` is a fourth class here (#948): it arrives as a dependency of
+`gnome-user-share`'s WebDAV, but desktop WebDAV runs its own per-session
+`httpd` process, so the packaged system units never run and port 80 must stay
+closed. The list asserts `httpd.service`, `httpd.socket`, `httpd@.service`
+and `htcacheclean.service` stay disabled. The packages stay installed (gnome-
+user-share requires them); only the system units are held off.
+
 ### The fwupd-refresh unit pins a static user (#385)
 
 Hummingbird builds fwupd with `-Dsystemd_unit_user=""`, which expands the
