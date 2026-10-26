@@ -40,9 +40,10 @@
 #   REPO_ORGANIZATION        GHCR org (default: projectbluefin)
 #   TACKLEBOX_BIN            host tacklebox binary (preferred: nested podman
 #                            breaks container DNS on some hosts; extract with
-#                            podman cp from the pinned TACKLEBOX_IMAGE below)
+#                            podman cp from the pinned TACKLEBOX_IMAGE)
 #   TACKLEBOX_IMAGE          tacklebox container (default: the digest-pinned
-#                            ghcr.io/tuna-os/tacklebox below)
+#                            ghcr.io/tuna-os/tacklebox in
+#                            iso/scripts/verify-tacklebox-attestation.sh)
 #   TACKLEBOX_FROM_SOURCE=1  build tacklebox from git instead (needs go)
 #   TACKLEBOX_SHA            pinned commit for from-source builds
 #   TACKLEBOX_TIMEOUT_SECONDS  deadline for the tacklebox invocation (default: 4800)

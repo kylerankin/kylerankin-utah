@@ -13,8 +13,10 @@ set -euo pipefail
 # image locally.
 readonly DEFAULT_TACKLEBOX_IMAGE="ghcr.io/tuna-os/tacklebox:latest@sha256:7415c1c23f83918b0c22f14ceee199e46f47e8411f54582d8b8899837c2c3441"
 # release-image.yml publishes the attestation keylessly; pin its Fulcio identity
-# so an attestation from any other workflow or repository is rejected.
-readonly ATTEST_IDENTITY="https://github.com/tuna-os/tacklebox/.github/workflows/release-image.yml@refs/heads/main"
+# so an attestation from any other workflow or repository is rejected. It runs
+# on both main pushes and v* tags, so accept either ref -- anchored, so no
+# other branch or workflow can match.
+readonly ATTEST_IDENTITY_REGEXP='^https://github\.com/tuna-os/tacklebox/\.github/workflows/release-image\.yml@refs/(heads/main|tags/v[^/]+)$'
 
 # Echo the pin without installing cosign or touching a registry, so callers can
 # read the same digest the build uses (utah#918).
@@ -35,15 +37,19 @@ command -v cosign >/dev/null 2>&1 || {
         aarch64) asset=cosign-linux-arm64; sha=ade83b7aac62e131cacfe96d958948b2150cc9efec46a570a2649b8e27dedad2 ;;
         *) echo "ERROR: $(uname -m) is not supported; install cosign manually." >&2; exit 1 ;;
     esac
-    curl -fsSL -o /usr/local/bin/cosign \
+    # Download outside any bin path and install only once the checksum
+    # passes, so a mismatch never leaves an unverified binary on PATH.
+    tmp=$(mktemp)
+    trap 'rm -f "$tmp"' EXIT
+    curl -fsSL --retry 3 --retry-delay 5 -o "$tmp" \
         "https://github.com/sigstore/cosign/releases/download/v3.1.4/${asset}"
-    echo "${sha}  /usr/local/bin/cosign" | sha256sum --check --status
-    chmod +x /usr/local/bin/cosign
+    echo "${sha}  ${tmp}" | sha256sum --check --status
+    install -m 0755 "$tmp" /usr/local/bin/cosign
 }
 
 echo "==> Verifying SLSA provenance of ${IMAGE} (utah#918)"
 cosign verify-attestation \
     --type=https://slsa.dev/provenance/v1 \
     --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
-    --certificate-identity="${ATTEST_IDENTITY}" \
+    --certificate-identity-regexp="${ATTEST_IDENTITY_REGEXP}" \
     "${IMAGE}"

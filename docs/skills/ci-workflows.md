@@ -1,7 +1,7 @@
 ---
 name: ci-workflows
 version: "1.0"
-last_updated: "2026-08-08"
+last_updated: "2026-10-25"
 id: ci-workflows
 one_line_purpose: Navigate Utah's build, promote, and sync workflow topology.
 entry_point: docs/skills/ci-workflows.md
