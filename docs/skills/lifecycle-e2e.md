@@ -19,6 +19,8 @@ metadata:
   type: runbook
 ---
 
+# Lifecycle e2e
+
 ## Lifecycle upgrade and rollback testing
 
 `just lifecycle-test <candidate-target-image> [disk-or-iso] [baseline-image]` runs

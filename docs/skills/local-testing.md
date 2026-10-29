@@ -1,7 +1,7 @@
 ---
 name: local-testing
 version: "1.0"
-last_updated: "2026-10-11"
+last_updated: "2026-10-29"
 id: local-testing
 one_line_purpose: Build, install, and boot Utah locally in a VM or live ISO.
 entry_point: docs/skills/local-testing.md
