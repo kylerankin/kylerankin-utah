@@ -68,19 +68,22 @@ jobs:
             echo "suites=$suites_json"
           } >> "$GITHUB_OUTPUT"
 
-  # Before any job pulls the new image, prove its SLSA provenance was produced
-  # by this repo's build.yml on testing (utah#1018). The promotion release gate
-  # checks the cosign signature's identity; this checks the provenance
+  # Before the privileged luks and tacklebox-iso jobs pull the new image, prove
+  # its SLSA provenance was produced by the reusable build workflow in
+  # projectbluefin/actions on utah/testing (utah#1018). The promotion release
+  # gate checks the cosign signature's identity; this checks the provenance
   # attestation itself, so an image attested by any other workflow or repo -- or
-  # forged under this identity -- is rejected before the privileged e2e gate
-  # touches it. Gate luks and tacklebox-iso on it so the check must pass first.
+  # forged under this identity -- is rejected before those privileged jobs
+  # touch it. Gate luks and tacklebox-iso on it so the check must pass first.
+  # (testsuite pulls the same digests without waiting on this job by design; it
+  # only surfaces results and never gates :testing promotion.)
   verify-provenance:
     needs: resolve
     runs-on: ubuntu-26.04
     timeout-minutes: 60
     permissions:
       contents: read
-      packages: read
+      actions: read
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.resolve.outputs.matrix) }}
@@ -89,19 +92,13 @@ jobs:
         with:
           ref: ${{ needs.resolve.outputs.sha }}
           persist-credentials: false
-      - name: Install podman and skopeo for the attestation fetch
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y podman skopeo fuse-overlayfs
       - name: Verify the image's SLSA provenance
         env:
           IMAGE_REF: ${{ matrix.ref }}
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           mkdir -p evidence
-          sudo bash iso/scripts/verify-image-provenance.sh "$IMAGE_REF" 2>&1 | tee evidence/provenance.log
+          bash iso/scripts/verify-image-provenance.sh "$IMAGE_REF" 2>&1 | tee evidence/provenance.log
   luks:
     needs: [resolve, verify-provenance]
     runs-on: ubuntu-26.04
