@@ -95,6 +95,7 @@ jobs:
       - name: Verify the image's SLSA provenance
         env:
           IMAGE_REF: ${{ matrix.ref }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           mkdir -p evidence

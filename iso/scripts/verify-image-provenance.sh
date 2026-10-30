@@ -26,9 +26,9 @@ IMAGE="${1:-}"
 # gh attestation verify is the purpose-built verifier for an attestation
 # produced by actions/attest-build-provenance: it checks the source repository
 # and the signer workflow separately, which is exactly the two things this gate
-# must confirm. gh is pre-authenticated on the runner, and the attestation is
-# served from the GitHub API rather than the registry, so no cosign binary or
-# registry login is needed.
+# must confirm. The verify step passes GH_TOKEN (gh is not pre-authenticated on
+# the runner), and the attestation is served from the GitHub API rather than the
+# registry, so no cosign binary or registry login is needed.
 echo "==> Verifying SLSA provenance of ${IMAGE} (utah#1018)"
 gh attestation verify "oci://${IMAGE}" \
     --repo projectbluefin/utah \
