@@ -231,10 +231,32 @@ class DecideTests(unittest.TestCase):
         self.assertIn("::warning", joined)
         self.assertIn("older than", joined)
 
-    def test_a_diverged_commit_is_refused_and_fails_the_job(self):
-        action, code, lines = decide(self.w, "fork")
-        self.assertEqual((action, code), ("refuse", 1))
-        self.assertIn("::error", "\n".join(lines))
+    def test_a_ghost_baseline_is_rebaselined_to_the_verified_main_head(self):
+        """A :testing commit whose line was rewritten out of main (a ghost) must
+        not freeze the ratchet: move :testing to the current verified main HEAD."""
+        w = world_with_history()
+        # :testing points at a commit (fork) whose line is not reachable from
+        # the current main HEAD "tip" -- structurally a ghost rewritten out of
+        # history, exactly like 33ed66a in projectbluefin/utah#1033.
+        for image in FLAVORS:
+            w.promote(image, w.publish(image, "fork"))
+        action, code, lines = decide(w, "tip")
+        self.assertEqual((action, code), ("promote", 0))
+        joined = "\n".join(lines)
+        self.assertIn("supersedes it", joined)
+        self.assertNotIn("::error", joined)
+
+    def test_a_behind_flavor_refuses_even_when_another_is_a_ghost(self):
+        """The out-of-order ('behind') case refuses over a ghost re-baseline, so
+        a stale tested commit can never move any flavor backward."""
+        w = world_with_history()
+        # utah-nvidia's :testing points at a ghost (fork, off main's line).
+        w.promote("utah-nvidia", w.publish("utah-nvidia", "fork"))
+        # utah's :testing points at a commit newer than the tested_sha.
+        w.promote("utah", w.publish("utah", "tip"))
+        action, code, lines = decide(w, "promoted")
+        self.assertEqual((action, code), ("refuse", 0))
+        self.assertIn("Out-of-order", "\n".join(lines))
 
     def test_the_same_digests_are_an_idempotent_noop(self):
         matrix = {"include": [self.w.entry(i, self.w.tags[f"{PREFIX}/{i}:testing"]) for i in FLAVORS]}

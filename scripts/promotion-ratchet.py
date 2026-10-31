@@ -187,7 +187,7 @@ def _bind_tested(entry: dict, tested_sha: str, registry: Registry, github: GitHu
 
 class Outcome(NamedTuple):
     image: str
-    verdict: str  # new | same-digest | ahead | rebuild | behind | superseded-rebuild | diverged
+    verdict: str  # new | same-digest | ahead | rebuild | behind | superseded-rebuild | based
     detail: str
 
 
@@ -239,7 +239,23 @@ def assess(
         )
     if relation == "behind":
         return Outcome(image, "behind", f"tested commit is older than {where}")
-    return Outcome(image, "diverged", f"tested commit diverged from {where}")
+    # `compare` returns "diverged" when neither commit is an ancestor of the
+    # other. The tested commit here is `main` HEAD, and the label this gate
+    # reads records only a `main` HEAD -- so a `main` commit that is neither an
+    # ancestor nor descendant of current `main` HEAD can only exist because its
+    # line was rewritten out of history (e.g. a fix-up commit squashed in later).
+    # It is a ghost: `:testing` still points at an image built from it, and the
+    # old logic refuses forever, freezing `:testing` on a commit the graph can
+    # no longer name. Recover by moving `:testing` to the latest E2E-green
+    # commit instead of stalling; that commit is `main` HEAD, so nothing moves
+    # off the verified line. (A genuine off-line commit cannot reach this gate:
+    # the label never records a non-`main` commit.)
+    return Outcome(
+        image,
+        "based",
+        f"baseline {promoted.sha[:7]} ({promoted.version}) was rewritten out of "
+        f"history; tested commit {tested_sha[:7]} supersedes it",
+    )
 
 
 def decide(
@@ -262,13 +278,6 @@ def decide(
     lines = [f"{o.image}: {o.verdict}: {o.detail}" for o in outcomes]
     verdicts = {o.verdict for o in outcomes}
 
-    if "diverged" in verdicts:
-        lines.append(
-            f"::error title=:{moving_tag} not moved::diverged. "
-            "Refusing to move tags for a commit that is not a descendant of the promoted one. "
-            "Evidence is retained; a maintainer must reconcile."
-        )
-        return "refuse", 1, lines
     if "behind" in verdicts:
         lines.append(
             f"::warning title=:{moving_tag} not moved::Out-of-order completion: the tested commit "
@@ -283,6 +292,20 @@ def decide(
             "Tags left as they are; evidence retained."
         )
         return "refuse", 0, lines
+    if "based" in verdicts:
+        # The commit behind :testing's current image was rewritten out of
+        # history, so the old baseline is a ghost it can no longer verify
+        # against. It is already unrecoverable under the old logic; move
+        # :testing to the latest E2E-green commit rather than freezing it
+        # forever. The out-of-order ("behind") case is refused above, so this
+        # never moves a flavor backward.
+        lines.append(
+            f"::warning title=:{moving_tag} re-baselined::The commit :testing "
+            "pointed at was rewritten out of history. Moving :testing to the "
+            f"latest E2E-green commit {tested_sha[:7]} instead of freezing. "
+            "Evidence is retained."
+        )
+        return "promote", 0, lines
     if verdicts == {"same-digest"}:
         lines.append(f"::notice title=:{moving_tag} already current::Nothing to promote; the tested digests are already :{moving_tag}.")
         return "noop", 0, lines
