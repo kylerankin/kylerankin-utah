@@ -326,8 +326,9 @@ jobs:
 
   # :testing is a ratchet over commits, not a mirror of the branch tip. The
   # tested digests become :testing when their commit is the promoted commit or
-  # a descendant of it, however far main has moved meanwhile; an older or
-  # diverged commit never moves it backwards. See scripts/promotion-ratchet.py.
+  # a descendant of it, however far main has moved meanwhile; an older commit,
+  # or a diverged one that is not strictly newer, refuses so nothing ever moves
+  # :testing backwards. See scripts/promotion-ratchet.py.
   #
   # This job is the only writer of :testing. The workflow-level concurrency
   # group (utah-iso-e2e, cancel-in-progress: false) runs one E2E at a time, so

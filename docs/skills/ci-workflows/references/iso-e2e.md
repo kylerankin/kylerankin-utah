@@ -85,14 +85,18 @@ tip. `promote-to-testing` runs `scripts/promotion-ratchet.py`, in order:
    release gate; tested digests already `:testing` -> `noop`; tested commit
    older, or a same-commit rebuild already superseded under its dated tag by a
    newer rebuild -> `refuse` with a `::warning` (out-of-order completion is
-   expected, the run stays green and the evidence is kept); a baseline commit
-   that is neither an ancestor nor descendant of the tested `main` HEAD is a
-   ghost -- its line was rewritten out of history (a squashed fix-up, a
-   rebase), so it can no longer be verified against -- and `:testing` is
-   re-baselined to the tested `main` HEAD with a `::warning`; an image not
-   built from the tested commit, any registry/API error or unreadable label
-   -> `::error`, job fails, nothing moves. Any one refusing flavor refuses the
-   whole promotion.
+   expected, the run stays green and the evidence is kept); a commit that is
+   neither an ancestor nor a descendant of the one `:testing` points at is a
+   divergence -- under testing -> squash -> main -> force-reset the commit
+   behind :testing is routinely squashed out of history (a squashed fix-up, a
+   rebase that dropped the commit the image was built from, projectbluefin/utah#1033),
+   so it can no longer be verified against. Only the newer side may win: if
+   the tested commit is strictly newer than the ghost, `:testing` is
+   re-baselined forward to it with a `::warning`; if the tested commit is
+   off-line and no newer, it refuses as an out-of-order completion; an image
+   not built from the tested commit, any registry/API error or unreadable
+   label -> `::error`, job fails, nothing moves. Any one refusing flavor
+   refuses the whole promotion.
 3. **Move** the tags (`skopeo copy --all --preserve-digests`) only on
    `promote`.
 
@@ -125,16 +129,21 @@ run only from `main`: the release gate trusts these statuses, and a dispatch
 from another ref would run that branch's copy of this file. It still tests; it
 cannot publish evidence or move a tag.
 
-**Ghost baseline.** The tested commit is always `main` HEAD, and the label this
-gate reads records only a `main` HEAD, so a `:testing` commit that is neither
-an ancestor nor a descendant of current `main` HEAD can only exist because its
-line was rewritten out of history -- a squashed fix-up or a rebase that dropped
-the commit the image was built from (projectbluefin/utah#1033). The old logic
-refused such a promotion forever, freezing `:testing` on a commit the graph can
-no longer name. The ratchet now re-baselines `:testing` to the tested `main`
-HEAD with a `::warning` instead of an error: that commit is the latest E2E-green
-commit, so nothing moves off the verified line, and the out-of-order (`behind`)
-case is still refused first, so a re-baseline never moves a flavor backwards.
+**Ghost baseline.** Under `testing` -> squash -> `main` -> force-reset, the
+commit behind a published `:testing` image is routinely squashed out of
+`main`'s history (a squashed fix-up, a rebase that dropped the commit the image
+was built from, projectbluefin/utah#1033). A `:testing` commit that is neither
+an ancestor nor a descendant of the tested commit -- GitHub `compare` reports
+`diverged` -- is exactly that squashed-away line, and the old logic refused such
+a promotion forever, freezing `:testing` on a commit the graph can no longer
+name. The ratchet now orders the two commits by committer date and lets only the
+newer side win: if the tested commit is strictly newer than the ghost, it is
+re-baselined forward to it (the latest E2E-green commit) with a `::warning`, so
+nothing moves off the verified line; if the tested commit is off-line and no
+newer -- a late out-of-order completion or an old build replayed by hand -- it
+refuses with a `::warning` and leaves the tags as they are. The `behind` case
+(the tested commit is a strict ancestor of what `:testing` points at) is refused
+first, so a re-baseline never moves a flavor backwards.
 
 **Recovery.** If `:testing` ever points at an image whose label cannot be
 read, every promotion fails closed until a maintainer retags `:testing` to a

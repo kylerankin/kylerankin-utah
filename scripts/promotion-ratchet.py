@@ -128,6 +128,13 @@ class GitHub:
             raise PromotionError(f"compare {base[:7]}...{head[:7]} returned {status!r}")
         return status
 
+    def committed_at(self, sha: str) -> str:
+        """ISO-8601 committer date; orders two commits that share no ancestry."""
+        when = self._api(f"repos/{self.repository}/commits/{sha}", "--jq", ".commit.committer.date")
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", when):
+            raise PromotionError(f"commit {sha[:7]} has no usable committer date ({when!r})")
+        return when
+
     def statuses(self, sha: str) -> list[dict]:
         out = self._api(
             f"repos/{self.repository}/commits/{sha}/statuses",
@@ -239,17 +246,12 @@ def assess(
         )
     if relation == "behind":
         return Outcome(image, "behind", f"tested commit is older than {where}")
-    # `compare` returns "diverged" when neither commit is an ancestor of the
-    # other. The tested commit here is `main` HEAD, and the label this gate
-    # reads records only a `main` HEAD -- so a `main` commit that is neither an
-    # ancestor nor descendant of current `main` HEAD can only exist because its
-    # line was rewritten out of history (e.g. a fix-up commit squashed in later).
-    # It is a ghost: `:testing` still points at an image built from it, and the
-    # old logic refuses forever, freezing `:testing` on a commit the graph can
-    # no longer name. Recover by moving `:testing` to the latest E2E-green
-    # commit instead of stalling; that commit is `main` HEAD, so nothing moves
-    # off the verified line. (A genuine off-line commit cannot reach this gate:
-    # the label never records a non-`main` commit.)
+    # Neither commit descends from the other. Under testing -> squash -> main
+    # -> force-reset this is routine: the commit behind :testing was squashed
+    # away. Only the newer side may win, so a pre-squash commit tested late
+    # (or an old build replayed by hand) cannot drag :testing behind its squash.
+    if github.committed_at(tested_sha) <= github.committed_at(promoted.sha):
+        return Outcome(image, "diverged", f"tested commit is off-line and no newer than {where}")
     return Outcome(
         image,
         "based",
@@ -278,6 +280,13 @@ def decide(
     lines = [f"{o.image}: {o.verdict}: {o.detail}" for o in outcomes]
     verdicts = {o.verdict for o in outcomes}
 
+    if "diverged" in verdicts:
+        lines.append(
+            f"::warning title=:{moving_tag} not moved::Out-of-order completion: the tested commit "
+            f"{tested_sha[:7]} is off-line and no newer than what :{moving_tag} points at. "
+            "Tags left as they are; evidence retained."
+        )
+        return "refuse", 0, lines
     if "behind" in verdicts:
         lines.append(
             f"::warning title=:{moving_tag} not moved::Out-of-order completion: the tested commit "
@@ -297,8 +306,10 @@ def decide(
         # history, so the old baseline is a ghost it can no longer verify
         # against. It is already unrecoverable under the old logic; move
         # :testing to the latest E2E-green commit rather than freezing it
-        # forever. The out-of-order ("behind") case is refused above, so this
-        # never moves a flavor backward.
+        # forever. This branch is only reached when the tested commit is
+        # strictly newer than the ghost: the 'diverged' and 'behind' cases
+        # above refuse any off-line commit no newer than the promoted one, so
+        # this re-baseline never moves a flavor backward.
         lines.append(
             f"::warning title=:{moving_tag} re-baselined::The commit :testing "
             "pointed at was rewritten out of history. Moving :testing to the "
